@@ -78,8 +78,8 @@ export function AnimatedTitle() {
   const { text, engine } = useTitleTypewriter();
 
   const handlers = usePointerInteraction({
-    onInteractionStart: () => engine.play(),
-    onInteractionEnd: () => engine.reverse(),
+    onInteractionStart: () => engine.toggle(),
+    onInteractionEnd: () => engine.toggle(),
     disabled: prefersReducedMotion,
   });
 

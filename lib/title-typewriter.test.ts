@@ -19,7 +19,7 @@ test("deletes the initial suffix and types a different suffix", () => {
     typeStepMs: 1,
   });
 
-  typewriter.play();
+  typewriter.toggle();
   for (let step = 0; step < 13; step++) vi.runOnlyPendingTimers();
 
   assert.deepEqual(texts, [
@@ -50,10 +50,10 @@ test("reverses from the current position when interrupted", () => {
     typeStepMs: 1,
   });
 
-  typewriter.play();
+  typewriter.toggle();
   vi.runOnlyPendingTimers();
   vi.runOnlyPendingTimers();
-  typewriter.reverse();
+  typewriter.toggle();
   vi.runOnlyPendingTimers();
   vi.runOnlyPendingTimers();
 
@@ -72,10 +72,10 @@ test("starts a fresh cycle from the completed suffix", () => {
     typeStepMs: 1,
   });
 
-  typewriter.play();
+  typewriter.toggle();
   vi.runOnlyPendingTimers();
   vi.runOnlyPendingTimers();
-  typewriter.play();
+  typewriter.toggle();
   vi.runOnlyPendingTimers();
   vi.runOnlyPendingTimers();
 
@@ -94,8 +94,8 @@ test.each([
     onText,
   });
 
-  typewriter.play();
-  typewriter.reverse();
+  typewriter.toggle();
+  typewriter.toggle();
   vi.runAllTimers();
 
   assert.equal(onText.mock.calls.length, 0);

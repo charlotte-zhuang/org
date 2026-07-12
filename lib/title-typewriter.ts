@@ -50,14 +50,9 @@ export class TitleTypewriter {
     this.onText = config.onText;
   }
 
-  /** Animate toward the revealed phrase. */
-  play(): void {
-    this.setTarget(this.total);
-  }
-
-  /** Animate back toward the resting title. */
-  reverse(): void {
-    this.setTarget(0);
+  /** Start a cycle, or reverse the current cycle if it is moving forward. */
+  toggle(): void {
+    this.setTarget(this.target === this.total ? 0 : this.total);
   }
 
   /** Cancel any in-flight animation and release the timer. */
