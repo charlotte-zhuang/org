@@ -1,10 +1,8 @@
 export type TitleTypewriterConfig = {
   /** Text that stays fixed on both sides of the effect, e.g. `"charlotte "`. */
   prefix: string;
-  /** Suffix that gets deleted first, e.g. `"zhuang"`. */
-  deleteText: string;
-  /** Suffix that gets typed out afterwards, e.g. `"says hi"`. */
-  typeText: string;
+  /** Possible suffixes. The first one is shown initially. */
+  suffixes: [string, string, ...string[]];
   /** Called with the current title every time a character is added or removed. */
   onText: (text: string) => void;
   /** Per-character delay while deleting. */
@@ -28,9 +26,10 @@ export type TitleTypewriterConfig = {
  */
 export class TitleTypewriter {
   private readonly prefix: string;
-  private readonly deleteText: string;
-  private readonly typeText: string;
-  private readonly total: number;
+  private readonly suffixes: [string, string, ...string[]];
+  private deleteText: string;
+  private typeText: string;
+  private total: number;
   private readonly deleteStepMs: number;
   private readonly typeStepMs: number;
   private readonly onText: (text: string) => void;
@@ -41,22 +40,19 @@ export class TitleTypewriter {
 
   constructor(config: TitleTypewriterConfig) {
     this.prefix = config.prefix;
-    this.deleteText = config.deleteText;
-    this.typeText = config.typeText;
-    this.total = config.deleteText.length + config.typeText.length;
+    this.suffixes = config.suffixes;
+    this.deleteText = config.suffixes[0];
+    this.typeText = this.pickNextSuffix();
+    this.total =
+      this.typeText === this.deleteText ? 0 : this.deleteText.length + this.typeText.length;
     this.deleteStepMs = config.deleteStepMs ?? 45;
     this.typeStepMs = config.typeStepMs ?? 75;
     this.onText = config.onText;
   }
 
-  /** Animate toward the revealed phrase. */
-  play(): void {
-    this.setTarget(this.total);
-  }
-
-  /** Animate back toward the resting title. */
-  reverse(): void {
-    this.setTarget(0);
+  /** Start a cycle, or reverse the current cycle if it is moving forward. */
+  toggle(): void {
+    this.setTarget(this.target === this.total ? 0 : this.total);
   }
 
   /** Cancel any in-flight animation and release the timer. */
@@ -89,7 +85,24 @@ export class TitleTypewriter {
     if (this.progress === this.target) return;
     this.progress += this.progress < this.target ? 1 : -1;
     this.onText(this.textFor(this.progress));
-    if (this.progress !== this.target) this.scheduleStep();
+    if (this.progress !== this.target) {
+      this.scheduleStep();
+    } else if (this.progress === this.total) {
+      this.startNextCycle();
+    }
+  }
+
+  private startNextCycle(): void {
+    this.deleteText = this.typeText;
+    this.typeText = this.pickNextSuffix();
+    this.total = this.deleteText.length + this.typeText.length;
+    this.progress = 0;
+    this.target = 0;
+  }
+
+  private pickNextSuffix(): string {
+    const choices = this.suffixes.filter((suffix) => suffix !== this.deleteText);
+    return choices[Math.floor(Math.random() * choices.length)] ?? this.deleteText;
   }
 
   private textFor(progress: number): string {

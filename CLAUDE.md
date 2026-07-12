@@ -1,20 +1,23 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 Personal website for charlottezhuang.org.
 
+Please push back against the user if instructions are unclear, if there is a better way to do things, or if the user appears misinformed. Do not blindly follow user instructions or just get things working. The user prefers more interaction, not less.
+
 ## Commands
 
-Package manager is **pnpm** (CI pins 11.4.0, Node 24). There is no test runner configured.
+Package manager is **pnpm** (CI pins 11.4.0, Node 24). Tests use **Vitest**.
 
 - `pnpm dev` — dev server (Next.js + Turbopack)
 - `pnpm build` — production build
+- `pnpm test` — run the Vitest suite once
 - `pnpm check` — the full CI gate: `format:check` + `lint` + `typecheck`. Run this before considering work done.
 - `pnpm fix` — auto-fix pass: `format` + `lint:fix` + `typecheck`
 - Individually: `pnpm typecheck` (`tsc --noEmit`), `pnpm lint` (`oxlint .`), `pnpm format` (`oxfmt .`)
 
-CI (`.github/workflows/ci.yml`) runs `pnpm check` then `pnpm build` on PRs and pushes to `main`.
+CI (`.github/workflows/ci.yml`) runs `pnpm check`, `pnpm test`, then `pnpm build` on PRs and pushes to `main`.
 
 ## Tooling notes
 
@@ -33,11 +36,23 @@ CI (`.github/workflows/ci.yml`) runs `pnpm check` then `pnpm build` on PRs and p
 
 ### Animated title (spans `lib/`, `hooks/`, `components/`)
 
-The header's hover-to-reveal effect ("charlotte zhuang" → deletes the last name → types "says hi", reversing on pointer-out) is deliberately split so the animation logic is framework-agnostic and testable:
+The header's interactive title starts with "charlotte zhuang", deletes the current suffix, and types a randomly selected different suffix. After a reveal completes, that suffix becomes the next cycle's starting point. Every interaction edge triggers the engine: fine-pointer enter and leave, or each coarse-pointer tap. An in-flight forward animation reverses; otherwise the event starts or resumes a forward animation. The implementation is deliberately split so the animation logic is framework-agnostic and testable:
 
-- `lib/title-typewriter.ts` — `TitleTypewriter`, a plain class with no React dependency. The whole effect is modeled as a single integer `progress` walking a fixed path (`0` = resting title, `total` = revealed title); the displayed string is a pure function of `progress`. `play()`/`reverse()` only set a target and the stepping loop walks toward it, so the effect is **interruptible in both directions for free** — flipping the target mid-flight just redirects from the current position. Emits each change through a single `onText` callback.
+- `lib/title-typewriter.ts` — `TitleTypewriter`, a plain class with no React dependency. It accepts a `[string, string, ...string[]]` suffix tuple, uses the first suffix initially, and randomly chooses a different destination for each cycle. The whole effect is modeled as a single integer `progress` walking a fixed path (`0` = current suffix, `total` = revealed suffix); the displayed string is a pure function of `progress`. Its only animation method, `toggle()`, switches the target between `0` and `total`, so an interaction can redirect mid-flight without the caller tracking engine state. On completion, the revealed suffix is promoted to the current suffix and `progress`/`target` reset to `0`, making the next toggle start a new cycle. Runtime inputs with fewer than two distinct suffixes are inert. Emits each change through a single `onText` callback; behavior is covered by `lib/title-typewriter.test.ts`.
 - `hooks/use-pointer-interaction.ts` — returns spreadable handler props. Fine pointers use hover (enter/leave) plus `window` blur + `visibilitychange` guards (because `pointerleave` doesn't fire when switching windows with the cursor parked on the element); coarse pointers tap-to-toggle. Keeps callbacks in a ref so window listeners subscribe once.
 - `hooks/use-prefers-reduced-motion.ts` — reduced-motion users get the static name with the interaction disabled.
-- `components/animated-title.tsx` — `"use client"`; bridges the engine to React state and renders the `<h1>`. Accessible name is pinned via `aria-label`; width is reserved with a stacked grid of both end states so the nav never shifts.
+- `components/animated-title.tsx` — `"use client"`; bridges the engine to React state and renders the `<h1>`. Accessible name is pinned via `aria-label`; width is reserved with a stacked grid of every possible suffix so the nav never shifts.
 
 Note on SSR: `prefers-reduced-motion` and `(pointer: coarse)` are client-only, so their hooks start from a default and correct after mount. This is safe here only because the resting render is identical regardless of those values. If a future consumer needs a _correct first paint_ from a media query, prefer CSS `@media` or a blocking head script over React state — a client-side initializer would still paint the server's guess first and only add a hydration mismatch.
+
+## Style notes
+
+- Prefer all lowercase for any visible text / copy (e.g. charlotte)
+- Prefer SSR over CSR
+- Be extremely judicious with `useEffect` for React
+  - Prefer an imperative pattern to avoid `useEffect`
+  - Do be sure to call `useEffect` when appropriate, e.g. adding event listeners
+- Strongly avoid code that bypasses TypeScript compiler like `foo as string` or `arr[0]!.value`
+  - Strongly prefer to get the TypeScript types correct
+  - Type casts are acceptable where safety can be guaranteed and proper typing would be overly complex
+- Strongly avoid `any` types

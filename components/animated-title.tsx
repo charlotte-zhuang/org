@@ -8,11 +8,20 @@ import { cn } from "@/lib/utils";
 import { TitleTypewriter } from "@/lib/title-typewriter";
 
 const PREFIX = "charlotte ";
-const DELETE_TEXT = "zhuang";
-const TYPE_TEXT = "says hi";
+const SUFFIXES: [string, string, ...string[]] = [
+  "zhuang",
+  "says hi",
+  "chip cookie",
+  "charlotte charlotte",
+  "<3",
+  "^_^",
+  "ʕ•ᴥ•ʔ",
+  ". . . :p",
+  ". . . xd",
+];
 
-const RESTING_TITLE = PREFIX + DELETE_TEXT; // "charlotte zhuang"
-const REVEALED_TITLE = PREFIX + TYPE_TEXT; // "charlotte says hi"
+const RESTING_TITLE = PREFIX + SUFFIXES[0]; // "charlotte zhuang"
+const POSSIBLE_TITLES = SUFFIXES.map((suffix) => PREFIX + suffix);
 
 function useTitleTypewriter() {
   const [text, setText] = useState(RESTING_TITLE);
@@ -20,8 +29,7 @@ function useTitleTypewriter() {
     () =>
       new TitleTypewriter({
         prefix: PREFIX,
-        deleteText: DELETE_TEXT,
-        typeText: TYPE_TEXT,
+        suffixes: SUFFIXES,
         onText: setText,
       }),
   );
@@ -70,14 +78,14 @@ export function AnimatedTitle() {
   const { text, engine } = useTitleTypewriter();
 
   const handlers = usePointerInteraction({
-    onInteractionStart: () => engine.play(),
-    onInteractionEnd: () => engine.reverse(),
+    onInteractionStart: () => engine.toggle(),
+    onInteractionEnd: () => engine.toggle(),
     disabled: prefersReducedMotion,
   });
 
   // Only blink while characters are moving — hide it once the effect settles at
   // either end (resting or fully revealed).
-  const showCaret = !prefersReducedMotion && text !== RESTING_TITLE && text !== REVEALED_TITLE;
+  const showCaret = !prefersReducedMotion && !POSSIBLE_TITLES.includes(text);
 
   return (
     <h1
@@ -86,8 +94,9 @@ export function AnimatedTitle() {
       className="cursor-default text-xl font-bold select-none"
     >
       <span className="grid">
-        <TitleLine>{RESTING_TITLE}</TitleLine>
-        <TitleLine>{REVEALED_TITLE}</TitleLine>
+        {POSSIBLE_TITLES.map((title) => (
+          <TitleLine key={title}>{title}</TitleLine>
+        ))}
         <TitleLine visible caretBlinking={showCaret}>
           {text}
         </TitleLine>
