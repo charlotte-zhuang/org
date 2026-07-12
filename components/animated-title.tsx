@@ -77,8 +77,7 @@ export function AnimatedTitle() {
 
   // Only blink while characters are moving — hide it once the effect settles at
   // either end (resting or fully revealed).
-  const showCaret =
-    !prefersReducedMotion && text !== RESTING_TITLE && text !== REVEALED_TITLE;
+  const showCaret = !prefersReducedMotion && text !== RESTING_TITLE && text !== REVEALED_TITLE;
 
   return (
     <h1
