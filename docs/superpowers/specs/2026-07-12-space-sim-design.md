@@ -17,13 +17,13 @@ zero dependencies, testability. "Looks like gravity" beats "is gravity."
 
 ## Decisions made
 
-| Question | Decision |
-| --- | --- |
-| Placement | Full-page fixed background behind header and future content |
-| Touch devices | Gravity exists while a finger is down; releases on lift |
-| Star color | `--muted-foreground` (secondary is near-invisible in light mode) |
-| Rendering tech | Canvas 2D, zero dependencies (no three.js/pixi/matter) |
-| Color plumbing | Dedicated `--space-*` CSS vars aliasing existing tokens |
+| Question       | Decision                                                         |
+| -------------- | ---------------------------------------------------------------- |
+| Placement      | Full-page fixed background behind header and future content      |
+| Touch devices  | Gravity exists while a finger is down; releases on lift          |
+| Star color     | `--muted-foreground` (secondary is near-invisible in light mode) |
+| Rendering tech | Canvas 2D, zero dependencies (no three.js/pixi/matter)           |
+| Color plumbing | Dedicated `--space-*` CSS vars aliasing existing tokens          |
 
 ## Architecture
 
