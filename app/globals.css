@@ -138,13 +138,16 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* The page is a single fixed screen where touch gestures belong to the
-     * space sim: one-finger drags must not scroll or rubber-band (`pinch-zoom`
-     * rather than `none` keeps accessibility zoom working; space-canvas also
-     * cancels single-finger touchmove because iOS ignores touch-action on the
-     * root document), and long-presses must not start text selection or the
-     * iOS loupe — hence no selectable text anywhere. Scope both rules away
-     * from body if scrollable/readable content ever lands. */
+  }
+  /* Gesture ownership while an interactive space sim is mounted (the canvas
+   * sets the attribute unless reduced motion disables interaction): one-finger
+   * drags must not scroll or rubber-band (`pinch-zoom` rather than `none`
+   * keeps accessibility zoom working; space-canvas also cancels single-finger
+   * touchmove because iOS ignores touch-action on the root document), and
+   * long-presses must not start text selection or the iOS loupe — hence no
+   * selectable text anywhere. Self-cleaning via :has(): unmount the sim and
+   * body behavior reverts. Revisit if scrollable/readable content lands. */
+  body:has([data-space-gestures]) {
     touch-action: pinch-zoom;
     overscroll-behavior: none;
     -webkit-user-select: none;

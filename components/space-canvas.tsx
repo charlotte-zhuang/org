@@ -202,9 +202,13 @@ export function SpaceCanvas() {
   }, [prefersReducedMotion]);
 
   return (
+    // data-space-gestures opts the page into sim gesture ownership (see
+    // globals.css); withheld under reduced motion so those users keep normal
+    // selection and scroll behavior alongside the static grid.
     <canvas
       ref={canvasRef}
       aria-hidden="true"
+      data-space-gestures={prefersReducedMotion ? undefined : ""}
       className="pointer-events-none fixed inset-0 -z-10 h-full w-full"
     />
   );
