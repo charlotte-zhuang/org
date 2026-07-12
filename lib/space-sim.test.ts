@@ -180,3 +180,57 @@ test("keeps a bounded trail ending at the current position", () => {
   assert.ok(Math.abs(headX - star.x) < 0.001);
   assert.ok(Math.abs(headY - star.y) < 0.001);
 });
+
+test("a star that reaches the pointer explodes", () => {
+  const sim = new SpaceSim(STAR_CONFIG);
+  const star = spawnFirstStar(sim);
+  for (let i = 0; i < 30; i++) sim.step(1 / 60); // move away from the spawn edge
+  sim.setPointer(star.x, star.y); // park the pointer right on its position
+  sim.step(1 / 60);
+  assert.equal(star.active, false);
+  const burst = sim.particles.filter((particle) => particle.active);
+  assert.equal(burst.length, 20); // default particlesPerExplosion
+  for (const particle of burst) {
+    // spawned at the crash site, at most one frame of drift away
+    assert.ok(Math.hypot(particle.x - star.x, particle.y - star.y) < 10);
+  }
+});
+
+test("explosion particles fade and free their pool slots", () => {
+  const sim = new SpaceSim(STAR_CONFIG);
+  const star = spawnFirstStar(sim);
+  for (let i = 0; i < 30; i++) sim.step(1 / 60);
+  sim.setPointer(star.x, star.y);
+  sim.step(1 / 60);
+  assert.ok(sim.particles.some((particle) => particle.active));
+  sim.clearPointer(); // so no follow-up star crashes during the fade
+  for (let i = 0; i < 60; i++) sim.step(1 / 60); // 1 s ≫ 0.6 s lifetime
+  assert.equal(sim.particles.filter((particle) => particle.active).length, 0);
+});
+
+test("stays finite through a long adversarial run", () => {
+  // Deterministic LCG (minstd) so failures are reproducible.
+  let seed = 1;
+  const random = () => {
+    seed = (seed * 48271) % 2147483647;
+    return seed / 2147483647;
+  };
+  const sim = new SpaceSim({ width: 200, height: 200, starSpawnSeconds: 0.2, random });
+  sim.setPointer(100, 100); // parked dead center, forever
+  for (let i = 0; i < 5000; i++) {
+    sim.step(i % 10 === 0 ? 10 : 1 / 60); // with occasional giant steps
+  }
+  for (let i = 0; i < 2 * sim.dotCount; i++) {
+    const offset = sim.offsets[i] ?? NaN;
+    assert.ok(Number.isFinite(offset));
+    assert.ok(Math.abs(offset) <= 18.001);
+  }
+  for (const star of sim.stars) {
+    assert.ok(Number.isFinite(star.x) && Number.isFinite(star.y));
+    assert.ok(Number.isFinite(star.vx) && Number.isFinite(star.vy));
+  }
+  for (const particle of sim.particles) {
+    assert.ok(Number.isFinite(particle.x) && Number.isFinite(particle.y));
+    assert.ok(particle.life >= 0 && particle.life <= 1);
+  }
+});

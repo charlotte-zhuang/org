@@ -54,6 +54,17 @@ export type Star = {
   trailCount: number;
 };
 
+export type Particle = {
+  /** Inactive entries are free pool slots. */
+  active: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Remaining life in [0, 1]; use directly as render alpha. */
+  life: number;
+};
+
 const DEFAULTS = {
   gridSpacing: 24,
   dotPull: 20_000,
@@ -78,6 +89,8 @@ const DEFAULTS = {
 const SPAWN_MARGIN = 20;
 /** How far outside the viewport a star must drift before being recycled. */
 const OFFSCREEN_MARGIN = 100;
+/** Per-second velocity damping rate for explosion particles. */
+const PARTICLE_DAMPING_RATE = 3;
 
 /**
  * Lo-fi 2D gravity simulation: a grid of dots displaced toward a single
@@ -100,6 +113,8 @@ export class SpaceSim {
   readonly dotMaxDisplacement: number;
   /** Star pool; iterate and skip inactive entries when rendering. */
   readonly stars: readonly Star[];
+  /** Explosion particle pool; iterate and skip inactive entries when rendering. */
+  readonly particles: readonly Particle[];
 
   private width: number;
   private height: number;
@@ -117,6 +132,10 @@ export class SpaceSim {
   private readonly starSoftening: number;
   private readonly starTrailLength: number;
   private spawnCountdown: number;
+  private readonly crashRadius: number;
+  private readonly particlesPerExplosion: number;
+  private readonly explosionSeconds: number;
+  private readonly explosionSpeed: number;
 
   constructor(config: SpaceSimConfig) {
     this.width = config.width;
@@ -144,6 +163,15 @@ export class SpaceSim {
       trail: new Float32Array(2 * this.starTrailLength),
       trailCount: 0,
     }));
+    this.crashRadius = config.crashRadius ?? DEFAULTS.crashRadius;
+    this.particlesPerExplosion = config.particlesPerExplosion ?? DEFAULTS.particlesPerExplosion;
+    this.explosionSeconds = config.explosionSeconds ?? DEFAULTS.explosionSeconds;
+    this.explosionSpeed = config.explosionSpeed ?? DEFAULTS.explosionSpeed;
+    // Sized for the worst case: every star crashing within one explosion.
+    this.particles = Array.from(
+      { length: (config.starCount ?? DEFAULTS.starCount) * this.particlesPerExplosion },
+      () => ({ active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0 }),
+    );
     this.buildGrid();
   }
 
@@ -170,6 +198,7 @@ export class SpaceSim {
     if (clamped <= 0) return;
     this.stepDots(clamped);
     this.stepStars(clamped);
+    this.stepParticles(clamped);
   }
 
   private stepDots(dt: number): void {
@@ -231,6 +260,18 @@ export class SpaceSim {
       star.x += star.vx * dt;
       star.y += star.vy * dt;
       this.pushTrail(star);
+      if (this.pointer !== null) {
+        const dx = this.pointer.x - star.x;
+        const dy = this.pointer.y - star.y;
+        if (dx * dx + dy * dy < this.crashRadius * this.crashRadius) {
+          // The crash radius doubles as the singularity guard: a star can
+          // never reach the tiny-r regime because it explodes first.
+          star.active = false;
+          star.trailCount = 0;
+          this.explode(star.x, star.y);
+          continue;
+        }
+      }
       if (
         star.x < -OFFSCREEN_MARGIN ||
         star.x > this.width + OFFSCREEN_MARGIN ||
@@ -282,6 +323,40 @@ export class SpaceSim {
     star.trail[2 * star.trailCount] = star.x;
     star.trail[2 * star.trailCount + 1] = star.y;
     star.trailCount += 1;
+  }
+
+  private explode(x: number, y: number): void {
+    // Evenly spread directions with jitter so bursts look round but not rigid.
+    let spawned = 0;
+    for (const particle of this.particles) {
+      if (particle.active) continue;
+      const angle = ((spawned + this.random()) / this.particlesPerExplosion) * 2 * Math.PI;
+      const speed = this.explosionSpeed * (0.5 + this.random());
+      particle.active = true;
+      particle.x = x;
+      particle.y = y;
+      particle.vx = Math.cos(angle) * speed;
+      particle.vy = Math.sin(angle) * speed;
+      particle.life = 1;
+      spawned += 1;
+      if (spawned === this.particlesPerExplosion) return;
+    }
+  }
+
+  private stepParticles(dt: number): void {
+    const damping = Math.exp(-PARTICLE_DAMPING_RATE * dt);
+    for (const particle of this.particles) {
+      if (!particle.active) continue;
+      particle.vx *= damping;
+      particle.vy *= damping;
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.life -= dt / this.explosionSeconds;
+      if (particle.life <= 0) {
+        particle.active = false;
+        particle.life = 0;
+      }
+    }
   }
 
   private buildGrid(): void {
