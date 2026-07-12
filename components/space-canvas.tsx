@@ -96,7 +96,7 @@ export function SpaceCanvas() {
     const ctx = canvas.getContext("2d");
     if (ctx === null) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+    let dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     let colors = resolveColors();
     const sim = new SpaceSim({ width: canvas.clientWidth, height: canvas.clientHeight });
 
@@ -111,6 +111,13 @@ export function SpaceCanvas() {
       rafId = requestAnimationFrame(frame);
     };
     const start = () => {
+      // `prefersReducedMotion` starts false and corrects after mount, so a
+      // reduced-motion user's first effect pass can briefly start the loop
+      // before the corrected value re-runs the effect and tears it down.
+      // This is invisible today only because dots move solely under a
+      // pointer and star spawns wait for spawnCountdown >= 2s (the
+      // starSpawnSeconds jitter floor) — tuning starSpawnSeconds toward zero
+      // would make this glitch visible.
       if (running || prefersReducedMotion) return;
       running = true;
       lastTime = performance.now();
@@ -123,6 +130,12 @@ export function SpaceCanvas() {
     };
 
     const applySize = () => {
+      // Re-read devicePixelRatio here (not just at mount) so dragging the
+      // window to a monitor with a different DPR, or zooming, re-scales the
+      // backing store correctly — the ResizeObserver below re-fires on those
+      // changes, and every draw/rAF use of `dpr` closes over this same
+      // mutable binding.
+      dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
       canvas.width = Math.round(canvas.clientWidth * dpr);
       canvas.height = Math.round(canvas.clientHeight * dpr);
       sim.resize(canvas.clientWidth, canvas.clientHeight);
