@@ -13,8 +13,10 @@ const links = [
 ];
 
 export default function RootHeader() {
+  // select-none: iOS long-press (a touch gesture for the space sim) would
+  // otherwise highlight the nearest text — which is this header.
   return (
-    <header className="mx-auto px-8 py-4 flex max-w-4xl flex-col gap-2 sm:flex-row sm:justify-between">
+    <header className="mx-auto px-8 py-4 flex max-w-4xl select-none flex-col gap-2 sm:flex-row sm:justify-between">
       <AnimatedTitle />
 
       <NavigationMenu>

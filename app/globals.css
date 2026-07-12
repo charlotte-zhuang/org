@@ -138,6 +138,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* The page is a single fixed screen: one-finger drags drive the space sim
+     * instead of scrolling/rubber-banding. `pinch-zoom` (not `none`) keeps
+     * accessibility zoom working. Scope this away from body if scrollable
+     * content ever lands. */
+    touch-action: pinch-zoom;
+    overscroll-behavior: none;
   }
   html {
     @apply font-sans;
