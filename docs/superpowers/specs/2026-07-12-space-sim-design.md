@@ -1,7 +1,7 @@
 # space sim — interactive gravity background
 
 **Date:** 2026-07-12
-**Status:** approved design, pre-implementation
+**Status:** approved plan
 
 ## Summary
 
