@@ -168,6 +168,12 @@ export function SpaceCanvas() {
       if (event.pointerType !== "mouse") sim.clearPointer();
     };
     const onLeave = () => sim.clearPointer();
+    // iOS Safari ignores touch-action/overscroll-behavior for the root
+    // document's rubber-band scroll, so single-finger drags must be cancelled
+    // here (non-passive) to stay sim input. Two-finger pinch zoom passes.
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 1) event.preventDefault();
+    };
     if (!prefersReducedMotion) {
       window.addEventListener("pointermove", onPointer);
       window.addEventListener("pointerdown", onPointer);
@@ -175,6 +181,7 @@ export function SpaceCanvas() {
       window.addEventListener("pointercancel", onPointerEnd);
       document.documentElement.addEventListener("pointerleave", onLeave);
       window.addEventListener("blur", onLeave);
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
     }
 
     start();
@@ -190,6 +197,7 @@ export function SpaceCanvas() {
       window.removeEventListener("pointercancel", onPointerEnd);
       document.documentElement.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("blur", onLeave);
+      window.removeEventListener("touchmove", onTouchMove);
     };
   }, [prefersReducedMotion]);
 

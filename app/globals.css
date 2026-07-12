@@ -138,12 +138,17 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* The page is a single fixed screen: one-finger drags drive the space sim
-     * instead of scrolling/rubber-banding. `pinch-zoom` (not `none`) keeps
-     * accessibility zoom working. Scope this away from body if scrollable
-     * content ever lands. */
+    /* The page is a single fixed screen where touch gestures belong to the
+     * space sim: one-finger drags must not scroll or rubber-band (`pinch-zoom`
+     * rather than `none` keeps accessibility zoom working; space-canvas also
+     * cancels single-finger touchmove because iOS ignores touch-action on the
+     * root document), and long-presses must not start text selection or the
+     * iOS loupe — hence no selectable text anywhere. Scope both rules away
+     * from body if scrollable/readable content ever lands. */
     touch-action: pinch-zoom;
     overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
   html {
     @apply font-sans;
