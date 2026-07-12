@@ -1,0 +1,121 @@
+export type SpaceSimConfig = {
+  /** Viewport width in CSS pixels. */
+  width: number;
+  /** Viewport height in CSS pixels. */
+  height: number;
+  /** Distance between dot home positions. */
+  gridSpacing?: number;
+  /** Dot pull strength; a dot's target displacement is `dotPull / (r² + dotSoftening²)`. */
+  dotPull?: number;
+  /** Softening length that keeps the dot pull finite at `r = 0`. */
+  dotSoftening?: number;
+  /** Cap on how far a dot may sit from its home. */
+  dotMaxDisplacement?: number;
+  /** Per-second rate at which a dot's displacement relaxes toward its target. */
+  dotRelaxRate?: number;
+  /** Star pool size — the most stars alive at once. */
+  starCount?: number;
+  /** Mean seconds between star spawns (jittered ±50%). */
+  starSpawnSeconds?: number;
+  /** Launch speed in px/s. */
+  starSpeed?: number;
+  /** Hard cap on star speed in px/s. */
+  starMaxSpeed?: number;
+  /** Star pull strength; acceleration is `starPull · Δ / (r² + starSoftening²)^(3/2)`. */
+  starPull?: number;
+  /** Softening length that keeps star acceleration finite near the pointer. */
+  starSoftening?: number;
+  /** Past positions remembered per star for its trail. */
+  starTrailLength?: number;
+  /** Distance from the pointer at which a star crashes. */
+  crashRadius?: number;
+  /** Particles emitted per crash. */
+  particlesPerExplosion?: number;
+  /** Particle lifetime in seconds. */
+  explosionSeconds?: number;
+  /** Base outward particle speed in px/s. */
+  explosionSpeed?: number;
+  /** Largest time step fed to the integrator, in seconds. */
+  maxDt?: number;
+  /** Returns [0, 1); injectable for deterministic tests. */
+  random?: () => number;
+};
+
+const DEFAULTS = {
+  gridSpacing: 24,
+  dotPull: 20_000,
+  dotSoftening: 24,
+  dotMaxDisplacement: 18,
+  dotRelaxRate: 10,
+  starCount: 3,
+  starSpawnSeconds: 4,
+  starSpeed: 280,
+  starMaxSpeed: 640,
+  starPull: 15_000_000,
+  starSoftening: 30,
+  starTrailLength: 6,
+  crashRadius: 14,
+  particlesPerExplosion: 20,
+  explosionSeconds: 0.6,
+  explosionSpeed: 120,
+  maxDt: 1 / 30,
+} as const;
+
+/**
+ * Lo-fi 2D gravity simulation: a grid of dots displaced toward a single
+ * pointer, plus shooting stars that deflect under the same gravity and explode
+ * if they reach it. Stability over physical fidelity throughout — every force
+ * is softened, capped, or both, so no value can run away no matter where the
+ * pointer sits or how large a time step arrives.
+ *
+ * Framework-agnostic on purpose: it knows nothing about React or the DOM. A
+ * renderer calls `step(dt)` once per frame and reads the public views.
+ */
+export class SpaceSim {
+  /** Number of grid dots. */
+  dotCount = 0;
+  /** Dot home positions as `[x0, y0, x1, y1, …]` in CSS pixels. */
+  homes = new Float32Array(0);
+  /** Dot displacements from home, same layout; add to `homes` when rendering. */
+  offsets = new Float32Array(0);
+  /** Displacement cap, public so renderers can normalize pull strength. */
+  readonly dotMaxDisplacement: number;
+
+  private width: number;
+  private height: number;
+  private readonly gridSpacing: number;
+
+  constructor(config: SpaceSimConfig) {
+    this.width = config.width;
+    this.height = config.height;
+    this.gridSpacing = config.gridSpacing ?? DEFAULTS.gridSpacing;
+    this.dotMaxDisplacement = config.dotMaxDisplacement ?? DEFAULTS.dotMaxDisplacement;
+    this.buildGrid();
+  }
+
+  /** Rebuild the dot grid for a new viewport. */
+  resize(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
+    this.buildGrid();
+  }
+
+  private buildGrid(): void {
+    const spacing = this.gridSpacing;
+    const cols = Math.max(1, Math.floor((this.width - spacing / 2) / spacing) + 1);
+    const rows = Math.max(1, Math.floor((this.height - spacing / 2) / spacing) + 1);
+    // Center the grid so leftover space splits evenly between opposite edges.
+    const marginX = (this.width - (cols - 1) * spacing) / 2;
+    const marginY = (this.height - (rows - 1) * spacing) / 2;
+    this.dotCount = cols * rows;
+    this.homes = new Float32Array(2 * this.dotCount);
+    this.offsets = new Float32Array(2 * this.dotCount);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const i = row * cols + col;
+        this.homes[2 * i] = marginX + col * spacing;
+        this.homes[2 * i + 1] = marginY + row * spacing;
+      }
+    }
+  }
+}
