@@ -84,12 +84,21 @@ export class SpaceSim {
   private width: number;
   private height: number;
   private readonly gridSpacing: number;
+  private readonly dotPull: number;
+  private readonly dotSoftening: number;
+  private readonly dotRelaxRate: number;
+  private readonly maxDt: number;
+  private pointer: { x: number; y: number } | null = null;
 
   constructor(config: SpaceSimConfig) {
     this.width = config.width;
     this.height = config.height;
     this.gridSpacing = config.gridSpacing ?? DEFAULTS.gridSpacing;
     this.dotMaxDisplacement = config.dotMaxDisplacement ?? DEFAULTS.dotMaxDisplacement;
+    this.dotPull = config.dotPull ?? DEFAULTS.dotPull;
+    this.dotSoftening = config.dotSoftening ?? DEFAULTS.dotSoftening;
+    this.dotRelaxRate = config.dotRelaxRate ?? DEFAULTS.dotRelaxRate;
+    this.maxDt = config.maxDt ?? DEFAULTS.maxDt;
     this.buildGrid();
   }
 
@@ -98,6 +107,52 @@ export class SpaceSim {
     this.width = width;
     this.height = height;
     this.buildGrid();
+  }
+
+  /** Place the gravity source, in CSS pixels. */
+  setPointer(x: number, y: number): void {
+    this.pointer = { x, y };
+  }
+
+  /** Remove the gravity source; dots relax home and stars fly straight. */
+  clearPointer(): void {
+    this.pointer = null;
+  }
+
+  /** Advance the simulation. `dt` is in seconds and clamped to `maxDt`. */
+  step(dt: number): void {
+    const clamped = Math.min(dt, this.maxDt);
+    if (clamped <= 0) return;
+    this.stepDots(clamped);
+  }
+
+  private stepDots(dt: number): void {
+    // Exponential relaxation toward a target displacement is the discrete form
+    // of a critically damped response: dots can never overshoot or oscillate,
+    // so the field is stable for any dt and always settles back into the grid.
+    const blend = 1 - Math.exp(-this.dotRelaxRate * dt);
+    const softening2 = this.dotSoftening * this.dotSoftening;
+    for (let i = 0; i < this.dotCount; i++) {
+      let targetX = 0;
+      let targetY = 0;
+      if (this.pointer !== null) {
+        const dx = this.pointer.x - (this.homes[2 * i] ?? 0);
+        const dy = this.pointer.y - (this.homes[2 * i + 1] ?? 0);
+        const r2 = dx * dx + dy * dy;
+        const r = Math.sqrt(r2);
+        if (r > 0) {
+          // Softened inverse square: finite at r = 0 and capped, so a dot can
+          // never stray more than dotMaxDisplacement from home.
+          const pull = Math.min(this.dotPull / (r2 + softening2), this.dotMaxDisplacement);
+          targetX = (dx / r) * pull;
+          targetY = (dy / r) * pull;
+        }
+      }
+      const ox = this.offsets[2 * i] ?? 0;
+      const oy = this.offsets[2 * i + 1] ?? 0;
+      this.offsets[2 * i] = ox + (targetX - ox) * blend;
+      this.offsets[2 * i + 1] = oy + (targetY - oy) * blend;
+    }
   }
 
   private buildGrid(): void {
