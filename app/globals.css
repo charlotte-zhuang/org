@@ -121,8 +121,12 @@
  * space sim entity colors — aliases so the palette is tunable in one place.
  * The referenced tokens flip with `.dark` on their own; add a `.dark` override
  * here only if dark mode should diverge from them.
+ *
+ * `@theme static` (not a plain `:root` block) because these are read only from
+ * JS (canvas fillStyle): Tailwind v4 strips custom properties that nothing in
+ * the CSS references, and `static` forces them into the build.
  */
-:root {
+@theme static {
   --space-dot: var(--primary);
   --space-star: var(--muted-foreground);
   --space-explosion: var(--muted-foreground);
