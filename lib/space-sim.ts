@@ -41,6 +41,19 @@ export type SpaceSimConfig = {
   random?: () => number;
 };
 
+export type Star = {
+  /** Inactive entries are pool slots waiting for the spawn timer. */
+  active: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Past positions, oldest first, as `[x0, y0, x1, y1, …]`. */
+  trail: Float32Array;
+  /** Number of valid position pairs in `trail`. */
+  trailCount: number;
+};
+
 const DEFAULTS = {
   gridSpacing: 24,
   dotPull: 20_000,
@@ -61,6 +74,11 @@ const DEFAULTS = {
   maxDt: 1 / 30,
 } as const;
 
+/** How far outside the viewport stars spawn. */
+const SPAWN_MARGIN = 20;
+/** How far outside the viewport a star must drift before being recycled. */
+const OFFSCREEN_MARGIN = 100;
+
 /**
  * Lo-fi 2D gravity simulation: a grid of dots displaced toward a single
  * pointer, plus shooting stars that deflect under the same gravity and explode
@@ -80,6 +98,8 @@ export class SpaceSim {
   offsets = new Float32Array(0);
   /** Displacement cap, public so renderers can normalize pull strength. */
   readonly dotMaxDisplacement: number;
+  /** Star pool; iterate and skip inactive entries when rendering. */
+  readonly stars: readonly Star[];
 
   private width: number;
   private height: number;
@@ -89,6 +109,14 @@ export class SpaceSim {
   private readonly dotRelaxRate: number;
   private readonly maxDt: number;
   private pointer: { x: number; y: number } | null = null;
+  private readonly random: () => number;
+  private readonly starSpawnSeconds: number;
+  private readonly starSpeed: number;
+  private readonly starMaxSpeed: number;
+  private readonly starPull: number;
+  private readonly starSoftening: number;
+  private readonly starTrailLength: number;
+  private spawnCountdown: number;
 
   constructor(config: SpaceSimConfig) {
     this.width = config.width;
@@ -99,6 +127,23 @@ export class SpaceSim {
     this.dotSoftening = config.dotSoftening ?? DEFAULTS.dotSoftening;
     this.dotRelaxRate = config.dotRelaxRate ?? DEFAULTS.dotRelaxRate;
     this.maxDt = config.maxDt ?? DEFAULTS.maxDt;
+    this.random = config.random ?? Math.random;
+    this.starSpawnSeconds = config.starSpawnSeconds ?? DEFAULTS.starSpawnSeconds;
+    this.starSpeed = config.starSpeed ?? DEFAULTS.starSpeed;
+    this.starMaxSpeed = config.starMaxSpeed ?? DEFAULTS.starMaxSpeed;
+    this.starPull = config.starPull ?? DEFAULTS.starPull;
+    this.starSoftening = config.starSoftening ?? DEFAULTS.starSoftening;
+    this.starTrailLength = config.starTrailLength ?? DEFAULTS.starTrailLength;
+    this.spawnCountdown = this.starSpawnSeconds * (0.5 + this.random());
+    this.stars = Array.from({ length: config.starCount ?? DEFAULTS.starCount }, () => ({
+      active: false,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      trail: new Float32Array(2 * this.starTrailLength),
+      trailCount: 0,
+    }));
     this.buildGrid();
   }
 
@@ -124,6 +169,7 @@ export class SpaceSim {
     const clamped = Math.min(dt, this.maxDt);
     if (clamped <= 0) return;
     this.stepDots(clamped);
+    this.stepStars(clamped);
   }
 
   private stepDots(dt: number): void {
@@ -153,6 +199,89 @@ export class SpaceSim {
       this.offsets[2 * i] = ox + (targetX - ox) * blend;
       this.offsets[2 * i + 1] = oy + (targetY - oy) * blend;
     }
+  }
+
+  private stepStars(dt: number): void {
+    this.spawnCountdown -= dt;
+    if (this.spawnCountdown <= 0) {
+      this.spawnCountdown = this.starSpawnSeconds * (0.5 + this.random());
+      const idle = this.stars.find((star) => !star.active);
+      if (idle !== undefined) this.spawnStar(idle);
+    }
+    const softening2 = this.starSoftening * this.starSoftening;
+    for (const star of this.stars) {
+      if (!star.active) continue;
+      if (this.pointer !== null) {
+        const dx = this.pointer.x - star.x;
+        const dy = this.pointer.y - star.y;
+        const r2 = dx * dx + dy * dy;
+        // Semi-implicit Euler — velocity first, then position from the new
+        // velocity. Same cost as naive Euler, far more stable near the source;
+        // the softening keeps acceleration finite even at r = 0.
+        const invR3 = 1 / (r2 + softening2) ** 1.5;
+        star.vx += this.starPull * dx * invR3 * dt;
+        star.vy += this.starPull * dy * invR3 * dt;
+        const speed = Math.hypot(star.vx, star.vy);
+        if (speed > this.starMaxSpeed) {
+          const scale = this.starMaxSpeed / speed;
+          star.vx *= scale;
+          star.vy *= scale;
+        }
+      }
+      star.x += star.vx * dt;
+      star.y += star.vy * dt;
+      this.pushTrail(star);
+      if (
+        star.x < -OFFSCREEN_MARGIN ||
+        star.x > this.width + OFFSCREEN_MARGIN ||
+        star.y < -OFFSCREEN_MARGIN ||
+        star.y > this.height + OFFSCREEN_MARGIN
+      ) {
+        star.active = false;
+        star.trailCount = 0;
+      }
+    }
+  }
+
+  private spawnStar(star: Star): void {
+    // Enter from just outside a random edge, aimed at the middle 60% of the
+    // viewport so every star actually crosses visible space.
+    const edge = Math.floor(this.random() * 4);
+    let x: number;
+    let y: number;
+    if (edge === 0) {
+      x = this.random() * this.width;
+      y = -SPAWN_MARGIN;
+    } else if (edge === 1) {
+      x = this.width + SPAWN_MARGIN;
+      y = this.random() * this.height;
+    } else if (edge === 2) {
+      x = this.random() * this.width;
+      y = this.height + SPAWN_MARGIN;
+    } else {
+      x = -SPAWN_MARGIN;
+      y = this.random() * this.height;
+    }
+    const targetX = this.width * (0.2 + 0.6 * this.random());
+    const targetY = this.height * (0.2 + 0.6 * this.random());
+    const distance = Math.hypot(targetX - x, targetY - y) || 1;
+    const speed = this.starSpeed * (0.8 + 0.4 * this.random());
+    star.active = true;
+    star.x = x;
+    star.y = y;
+    star.vx = ((targetX - x) / distance) * speed;
+    star.vy = ((targetY - y) / distance) * speed;
+    star.trailCount = 0;
+  }
+
+  private pushTrail(star: Star): void {
+    if (star.trailCount === this.starTrailLength) {
+      star.trail.copyWithin(0, 2);
+      star.trailCount -= 1;
+    }
+    star.trail[2 * star.trailCount] = star.x;
+    star.trail[2 * star.trailCount + 1] = star.y;
+    star.trailCount += 1;
   }
 
   private buildGrid(): void {

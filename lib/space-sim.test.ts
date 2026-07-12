@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { SpaceSim } from "./space-sim";
+import { SpaceSim, type Star } from "./space-sim";
 
 // 240 × 120 at spacing 24 → 10 columns × 5 rows, homes from (12, 12) to (228, 108).
 const SIZE = { width: 240, height: 120, gridSpacing: 24 };
@@ -105,4 +105,78 @@ test("clamps giant time steps", () => {
   jumped.step(10); // e.g. a tab restored after minutes in the background
   stepped.step(1 / 30); // default maxDt
   assert.deepEqual(jumped.offsets, stepped.offsets);
+});
+
+// random () => 0.5 always picks the bottom edge, centered, aimed straight up
+// at the viewport center at exactly starSpeed. Spawn is 20 px outside.
+const STAR_CONFIG = {
+  width: 400,
+  height: 300,
+  starSpawnSeconds: 0.1,
+  random: () => 0.5,
+};
+
+/** Step until the first star spawns (bounded so a broken spawner can't hang). */
+function spawnFirstStar(sim: SpaceSim): Star {
+  for (let i = 0; i < 120 && sim.stars.every((star) => !star.active); i++) {
+    sim.step(1 / 60);
+  }
+  const star = sim.stars.find((candidate) => candidate.active);
+  assert.ok(star !== undefined, "expected a star to spawn");
+  return star;
+}
+
+test("spawns a star at an edge flying into the viewport", () => {
+  const sim = new SpaceSim(STAR_CONFIG);
+  const star = spawnFirstStar(sim);
+  assert.equal(star.x, 200);
+  assert.ok(star.y > 300); // still just outside the bottom edge
+  assert.equal(star.vx, 0);
+  assert.ok(star.vy < 0); // heading up, into view
+  for (let i = 0; i < 30; i++) sim.step(1 / 60);
+  assert.ok(star.y < 300); // now inside the viewport
+});
+
+test("deflects toward the pointer", () => {
+  const sim = new SpaceSim(STAR_CONFIG);
+  const star = spawnFirstStar(sim);
+  sim.setPointer(100, 150); // left of the star's straight-up path
+  for (let i = 0; i < 30; i++) sim.step(1 / 60);
+  assert.ok(star.vx < 0); // bent left
+});
+
+test("clamps star speed under heavy gravity", () => {
+  const sim = new SpaceSim({ ...STAR_CONFIG, starMaxSpeed: 300 });
+  const star = spawnFirstStar(sim);
+  sim.setPointer(200, 150); // directly in the star's path
+  let maxSpeed = 0;
+  for (let i = 0; i < 240; i++) {
+    sim.step(1 / 60);
+    if (star.active) maxSpeed = Math.max(maxSpeed, Math.hypot(star.vx, star.vy));
+  }
+  assert.ok(maxSpeed > 280); // gravity actually sped it up…
+  assert.ok(maxSpeed <= 300.001); // …but never past the cap
+});
+
+test("recycles a star once it leaves the viewport", () => {
+  const sim = new SpaceSim(STAR_CONFIG);
+  const star = spawnFirstStar(sim);
+  // No pointer: it flies straight up and out. 420 px of travel at 280 px/s.
+  let recycled = false;
+  for (let i = 0; i < 200 && !recycled; i++) {
+    sim.step(1 / 60);
+    if (!star.active) recycled = true;
+  }
+  assert.ok(recycled);
+});
+
+test("keeps a bounded trail ending at the current position", () => {
+  const sim = new SpaceSim(STAR_CONFIG);
+  const star = spawnFirstStar(sim);
+  for (let i = 0; i < 30; i++) sim.step(1 / 60);
+  assert.equal(star.trailCount, 6); // default starTrailLength
+  const headX = star.trail[10] ?? 0;
+  const headY = star.trail[11] ?? 0;
+  assert.ok(Math.abs(headX - star.x) < 0.001);
+  assert.ok(Math.abs(headY - star.y) < 0.001);
 });
