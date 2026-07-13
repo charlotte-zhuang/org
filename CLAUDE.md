@@ -45,6 +45,14 @@ The header's interactive title starts with "charlotte zhuang", deletes the curre
 
 Note on SSR: `prefers-reduced-motion` and `(pointer: coarse)` are client-only, so their hooks start from a default and correct after mount. This is safe here only because the resting render is identical regardless of those values. If a future consumer needs a _correct first paint_ from a media query, prefer CSS `@media` or a blocking head script over React state — a client-side initializer would still paint the server's guess first and only add a hydration mismatch.
 
+### Space sim background (spans `lib/`, `components/`)
+
+The full-page background is a lo-fi dot-matrix gravity simulation: a grid of dots pulled toward the pointer with a softened inverse-square law, plus shooting stars that deflect under the same gravity and explode into pixel bursts if they reach the pointer. Same split as the animated title:
+
+- `lib/space-sim.ts` — `SpaceSim`, a plain class with no React/DOM dependency. Stability over fidelity: grid dots are not free bodies (their displacement relaxes exponentially toward a capped, softened inverse-square target, so the field cannot oscillate or escape); stars are free bodies integrated with semi-implicit Euler and a speed clamp, and the crash radius around the pointer doubles as the singularity guard. `step(dt)` clamps `dt`. Fixed pools, zero per-frame allocation, RNG injected for deterministic tests (`lib/space-sim.test.ts`).
+- `components/space-canvas.tsx` — `"use client"` leaf; owns the canvas, rAF loop, DPR-capped sizing, window-level pointer wiring (hover on fine pointers, press-and-hold on touch, blur/leave guards), theme-aware color resolution (`getComputedStyle` re-read on `dark`-class flips), and a `visibilitychange` pause. Draws everything as device-pixel-snapped `fillRect`s. Colors come from the `--space-dot`/`--space-star`/`--space-explosion` aliases in `app/globals.css` (declared with `@theme static` — Tailwind v4 strips plain `:root` custom properties that only JS reads) — tune the palette there, not in the component.
+- Reduced motion (`use-prefers-reduced-motion`): static grid, no loop, no interaction.
+
 ## Style notes
 
 - Prefer all lowercase for any visible text / copy (e.g. charlotte)

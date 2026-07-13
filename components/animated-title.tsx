@@ -11,13 +11,9 @@ const PREFIX = "charlotte ";
 const SUFFIXES: [string, string, ...string[]] = [
   "zhuang",
   "says hi",
-  "chip cookie",
-  "charlotte charlotte",
-  "<3",
+  "ǝʇʇolɹɐɥɔ",
   "^_^",
-  "ʕ•ᴥ•ʔ",
-  ". . . :p",
-  ". . . xd",
+  " ✧˖˙⊹₊⋆",
 ];
 
 const RESTING_TITLE = PREFIX + SUFFIXES[0]; // "charlotte zhuang"
