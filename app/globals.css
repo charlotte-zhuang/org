@@ -144,14 +144,17 @@
    * drags must not scroll or rubber-band (`pinch-zoom` rather than `none`
    * keeps accessibility zoom working; space-canvas also cancels single-finger
    * touchmove because iOS ignores touch-action on the root document), and
-   * long-presses must not start text selection or the iOS loupe — hence no
-   * selectable text anywhere. Self-cleaning via :has(): unmount the sim and
-   * body behavior reverts. Revisit if scrollable/readable content lands. */
+   * long-presses must not start text selection or the iOS loupe/callout —
+   * hence no selectable text (user-select) and no callout (touch-callout, which
+   * user-select alone doesn't suppress on iOS) anywhere. Self-cleaning via
+   * :has(): unmount the sim and body behavior reverts. Revisit if
+   * scrollable/readable content lands. */
   body:has([data-space-gestures]) {
     touch-action: pinch-zoom;
     overscroll-behavior: none;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-touch-callout: none;
   }
   html {
     @apply font-sans;
